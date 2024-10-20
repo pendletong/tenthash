@@ -4,7 +4,7 @@ import gleam/io
 import gleam/list
 import gleam/result
 
-pub type HashState {
+type HashState {
   HashState(a: BigInt, b: BigInt, c: BigInt, d: BigInt)
 }
 
