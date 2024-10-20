@@ -94,6 +94,7 @@ fn do_hash(data: BitArray, state: HashState) -> Result(HashState, Nil) {
         }
       }
     }
+    // The following shouldn't happen
     _ -> todo
   }
 }
