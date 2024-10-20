@@ -2,6 +2,8 @@
 
 Gleam based implementation of TentHash(https://github.com/cessen/tenthash)
 
+Currently only works in Erlang.
+
 [![Package Version](https://img.shields.io/hexpm/v/tenthash)](https://hex.pm/packages/tenthash)
 [![Hex Docs](https://img.shields.io/badge/hex-docs-ffaff3)](https://hexdocs.pm/tenthash/)
 
