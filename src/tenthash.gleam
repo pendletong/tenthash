@@ -32,7 +32,12 @@ pub fn new() -> Result(HashState, Nil) {
 
 /// Updates the HashState using the provided String
 pub fn update(state: HashState, data: String) -> Result(HashState, Nil) {
-  do_hash(bit_array.from_string(data), state)
+  let data = case state.remaining {
+    <<>> -> bit_array.from_string(data)
+    <<a:bits>> -> bit_array.append(a, bit_array.from_string(data))
+    _ -> bit_array.from_string(data)
+  }
+  do_hash(data, state)
 }
 
 /// Updates the HashState using the provided BitArray
@@ -40,6 +45,11 @@ pub fn update_bitarray(
   state: HashState,
   data: BitArray,
 ) -> Result(HashState, Nil) {
+  let data = case state.remaining {
+    <<>> -> data
+    <<a:bits>> -> bit_array.append(a, data)
+    _ -> data
+  }
   do_hash(data, state)
 }
 
