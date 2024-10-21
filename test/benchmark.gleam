@@ -1,5 +1,4 @@
 import bigi
-import gleam/int
 import gleam/io
 import gleam/list
 import gleam/result
@@ -15,7 +14,7 @@ pub fn main() {
   configuration.set_pair(configuration.Parallel, 2)
 
   hash_benchmark()
-  // bigi_benchmark()
+  bigi_benchmark()
 }
 
 fn bigi_benchmark() {

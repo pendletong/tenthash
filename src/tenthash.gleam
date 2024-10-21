@@ -1,11 +1,18 @@
 import bigi.{type BigInt}
 import gleam/bit_array
-import gleam/io
 import gleam/list
 import gleam/result
 
-type HashState {
-  HashState(a: BigInt, b: BigInt, c: BigInt, d: BigInt, bm: BigInt)
+pub opaque type HashState {
+  HashState(
+    a: BigInt,
+    b: BigInt,
+    c: BigInt,
+    d: BigInt,
+    bm: BigInt,
+    remaining: BitArray,
+    len: Int,
+  )
 }
 
 const start_state = [
@@ -18,28 +25,27 @@ const rotation_constants = [
   #(16, 28), #(14, 57), #(11, 22), #(35, 34), #(57, 16), #(59, 40), #(44, 13),
 ]
 
-pub fn main() {
-  //   io.println("Hello from tenthash!")
-  //   // io.debug(6_732_230_515_997_387_111)
-  //   // do_hash(
-  //   //   bit_array.from_string("abcdefghijklmnopqrstuvwxyz"),
-  //   //   HashState(bigi.zero(), bigi.zero(), bigi.zero(), bigi.zero()),
-  //   // )
-  //   // |> io.debug
-  //   let assert Ok(a) = hash("abcdefghijklmnopqrstuvwxyz")
-  //   io.debug(a)
-  //   io.debug(bigi.to_string(a))
-  //   // let a = bigi.subtract(bitmask(64), bitmask(63))
+/// Returns a HashState to allow creating a hash using streaming
+pub fn new() -> Result(HashState, Nil) {
+  initial_state()
+}
 
-  //   // rot_left(a, 3)
-  //   // |> io.debug
+/// Updates the HashState using the provided String
+pub fn update(state: HashState, data: String) -> Result(HashState, Nil) {
+  do_hash(bit_array.from_string(data), state)
+}
 
-  bigi.from_bytes(
-    <<93, 109, 175, 252, 68, 17, 169, 103>>,
-    bigi.BigEndian,
-    bigi.Unsigned,
-  )
-  |> io.debug
+/// Updates the HashState using the provided BitArray
+pub fn update_bitarray(
+  state: HashState,
+  data: BitArray,
+) -> Result(HashState, Nil) {
+  do_hash(data, state)
+}
+
+/// Finalises the hash and returns the resulting BigInt
+pub fn finalise(state: HashState) -> Result(BigInt, Nil) {
+  finalise_hash(state)
 }
 
 /// Takes a String and returns a BigInt result 
@@ -64,7 +70,7 @@ pub fn hash_bitarray(data: BitArray) -> Result(BigInt, Nil) {
 
   use final_state <- result.try(do_hash(data, init_state))
 
-  finalise_hash(final_state, bit_array.byte_size(data) * 8)
+  finalise_hash(final_state)
 }
 
 fn initial_state() -> Result(HashState, Nil) {
@@ -73,7 +79,7 @@ fn initial_state() -> Result(HashState, Nil) {
   use b <- result.try(bigi.from_bytes(b, bigi.BigEndian, bigi.Unsigned))
   use c <- result.try(bigi.from_bytes(c, bigi.BigEndian, bigi.Unsigned))
   use d <- result.try(bigi.from_bytes(d, bigi.BigEndian, bigi.Unsigned))
-  Ok(HashState(a, b, c, d, bitmask(64)))
+  Ok(HashState(a, b, c, d, bitmask(64), <<>>, 0))
 }
 
 fn do_hash(data: BitArray, state: HashState) -> Result(HashState, Nil) {
@@ -85,22 +91,18 @@ fn do_hash(data: BitArray, state: HashState) -> Result(HashState, Nil) {
       d:bytes-size(8),
       rest:bits,
     >> -> {
-      use hashed_bits <- result.try(hash_bits(a, b, c, d, state))
+      use hashed_bits <- result.try(hash_bits(
+        a,
+        b,
+        c,
+        d,
+        HashState(..state, remaining: rest, len: state.len + 32),
+      ))
       do_hash(rest, hashed_bits)
     }
     <<>> -> Ok(state)
     <<a:bits>> -> {
-      let extra_bits = 32 - bit_array.byte_size(a)
-      let a = bit_array.concat([a, <<0:size({ extra_bits * 8 })>>])
-      case a {
-        <<a:bytes-size(8), b:bytes-size(8), c:bytes-size(8), d:bytes>> -> {
-          use hashed_bits <- result.try(hash_bits(a, b, c, d, state))
-          Ok(hashed_bits)
-        }
-        _ -> {
-          Error(Nil)
-        }
-      }
+      Ok(HashState(..state, remaining: a))
     }
     // The following shouldn't happen
     _ -> {
@@ -122,24 +124,52 @@ fn hash_bits(
   let d = bigi.from_bytes(d, bigi.LittleEndian, bigi.Unsigned)
   case a, b, c, d {
     Ok(a), Ok(b), Ok(c), Ok(d) ->
-      Ok(
-        mix_hash(HashState(
-          bigi.bitwise_exclusive_or(state.a, a),
-          bigi.bitwise_exclusive_or(state.b, b),
-          bigi.bitwise_exclusive_or(state.c, c),
-          bigi.bitwise_exclusive_or(state.d, d),
-          state.bm,
-        )),
-      )
+      Ok(mix_hash(
+        HashState(
+          ..state,
+          a: bigi.bitwise_exclusive_or(state.a, a),
+          b: bigi.bitwise_exclusive_or(state.b, b),
+          c: bigi.bitwise_exclusive_or(state.c, c),
+          d: bigi.bitwise_exclusive_or(state.d, d),
+        ),
+      ))
     _, _, _, _ -> Error(Nil)
   }
 }
 
-fn finalise_hash(state: HashState, len: Int) -> Result(BigInt, Nil) {
+fn finalise_hash(state: HashState) -> Result(BigInt, Nil) {
+  use state <- result.try(case state.remaining {
+    <<>> -> Ok(state)
+    <<a:bits>> -> {
+      let size = bit_array.byte_size(a)
+      let extra_bits = 32 - size
+      let a = bit_array.concat([a, <<0:size({ extra_bits * 8 })>>])
+      case a {
+        <<a:bytes-size(8), b:bytes-size(8), c:bytes-size(8), d:bytes-size(8)>> -> {
+          use hashed_bits <- result.try(hash_bits(
+            a,
+            b,
+            c,
+            d,
+            HashState(..state, remaining: <<>>, len: state.len + size),
+          ))
+          Ok(hashed_bits)
+        }
+        _ -> {
+          Error(Nil)
+        }
+      }
+    }
+
+    // The following shouldn't happen
+    _ -> {
+      Error(Nil)
+    }
+  })
   let state =
     HashState(
       ..state,
-      a: bigi.bitwise_exclusive_or(state.a, bigi.from_int(len)),
+      a: bigi.bitwise_exclusive_or(state.a, bigi.from_int(state.len * 8)),
     )
   let final_state = mix_hash(mix_hash(state))
   let assert Ok(a) =
@@ -163,7 +193,7 @@ fn mix_hash(state: HashState) -> HashState {
     let c = bigi.bitwise_exclusive_or(c, a)
     let d = rot_left(state.d, rc.1, state.bm)
     let d = bigi.bitwise_exclusive_or(d, b)
-    HashState(b, a, c, d, state.bm)
+    HashState(..state, a: b, b: a, c:, d:)
   })
 }
 
