@@ -5,34 +5,42 @@ import gleam/list
 import gleam/result
 
 type HashState {
-  HashState(a: BigInt, b: BigInt, c: BigInt, d: BigInt)
+  HashState(a: BigInt, b: BigInt, c: BigInt, d: BigInt, bm: BigInt)
 }
 
 const start_state = [
-  "6732230515997387111", "16297768295691943732", "14578299661238189102",
-  "9893891307554648435",
+  <<93, 109, 175, 252, 68, 17, 169, 103>>,
+  <<226, 45, 77, 234, 104, 87, 127, 52>>, <<202, 80, 134, 77, 129, 76, 188, 46>>,
+  <<137, 78, 41, 185, 97, 30, 177, 115>>,
 ]
 
 const rotation_constants = [
-  [16, 28], [14, 57], [11, 22], [35, 34], [57, 16], [59, 40], [44, 13],
+  #(16, 28), #(14, 57), #(11, 22), #(35, 34), #(57, 16), #(59, 40), #(44, 13),
 ]
 
-// pub fn main() {
-//   io.println("Hello from tenthash!")
-//   // io.debug(6_732_230_515_997_387_111)
-//   // do_hash(
-//   //   bit_array.from_string("abcdefghijklmnopqrstuvwxyz"),
-//   //   HashState(bigi.zero(), bigi.zero(), bigi.zero(), bigi.zero()),
-//   // )
-//   // |> io.debug
-//   let assert Ok(a) = hash("abcdefghijklmnopqrstuvwxyz")
-//   io.debug(a)
-//   io.debug(bigi.to_string(a))
-//   // let a = bigi.subtract(bitmask(64), bitmask(63))
+pub fn main() {
+  //   io.println("Hello from tenthash!")
+  //   // io.debug(6_732_230_515_997_387_111)
+  //   // do_hash(
+  //   //   bit_array.from_string("abcdefghijklmnopqrstuvwxyz"),
+  //   //   HashState(bigi.zero(), bigi.zero(), bigi.zero(), bigi.zero()),
+  //   // )
+  //   // |> io.debug
+  //   let assert Ok(a) = hash("abcdefghijklmnopqrstuvwxyz")
+  //   io.debug(a)
+  //   io.debug(bigi.to_string(a))
+  //   // let a = bigi.subtract(bitmask(64), bitmask(63))
 
-//   // rot_left(a, 3)
-//   // |> io.debug
-// }
+  //   // rot_left(a, 3)
+  //   // |> io.debug
+
+  bigi.from_bytes(
+    <<93, 109, 175, 252, 68, 17, 169, 103>>,
+    bigi.BigEndian,
+    bigi.Unsigned,
+  )
+  |> io.debug
+}
 
 /// Takes a String and returns a BigInt result 
 /// or Error(Nil) if hash failed for some reason
@@ -61,11 +69,11 @@ pub fn hash_bitarray(data: BitArray) -> Result(BigInt, Nil) {
 
 fn initial_state() -> Result(HashState, Nil) {
   let assert [a, b, c, d] = start_state
-  use a <- result.try(bigi.from_string(a))
-  use b <- result.try(bigi.from_string(b))
-  use c <- result.try(bigi.from_string(c))
-  use d <- result.try(bigi.from_string(d))
-  Ok(HashState(a, b, c, d))
+  use a <- result.try(bigi.from_bytes(a, bigi.BigEndian, bigi.Unsigned))
+  use b <- result.try(bigi.from_bytes(b, bigi.BigEndian, bigi.Unsigned))
+  use c <- result.try(bigi.from_bytes(c, bigi.BigEndian, bigi.Unsigned))
+  use d <- result.try(bigi.from_bytes(d, bigi.BigEndian, bigi.Unsigned))
+  Ok(HashState(a, b, c, d, bitmask(64)))
 }
 
 fn do_hash(data: BitArray, state: HashState) -> Result(HashState, Nil) {
@@ -87,7 +95,7 @@ fn do_hash(data: BitArray, state: HashState) -> Result(HashState, Nil) {
       case a {
         <<a:bytes-size(8), b:bytes-size(8), c:bytes-size(8), d:bytes>> -> {
           use hashed_bits <- result.try(hash_bits(a, b, c, d, state))
-          do_hash(<<>>, hashed_bits)
+          Ok(hashed_bits)
         }
         _ -> {
           Error(Nil)
@@ -120,6 +128,7 @@ fn hash_bits(
           bigi.bitwise_exclusive_or(state.b, b),
           bigi.bitwise_exclusive_or(state.c, c),
           bigi.bitwise_exclusive_or(state.d, d),
+          state.bm,
         )),
       )
     _, _, _, _ -> Error(Nil)
@@ -139,28 +148,22 @@ fn finalise_hash(state: HashState, len: Int) -> Result(BigInt, Nil) {
     bigi.to_bytes(final_state.b, bigi.LittleEndian, bigi.Unsigned, 8)
   let assert Ok(c) =
     bigi.to_bytes(final_state.c, bigi.LittleEndian, bigi.Unsigned, 8)
-  let ba = bit_array.append(a, bit_array.append(b, c))
+  let ba = bit_array.concat([a, b, c])
   let assert Ok(slice) = bit_array.slice(ba, 0, 20)
   bigi.from_bytes(slice, bigi.BigEndian, bigi.Unsigned)
 }
 
 fn mix_hash(state: HashState) -> HashState {
-  let bitmask = bitmask(64)
-  list.fold(rotation_constants, state, fn(state, c) {
-    let assert [c1, c2] = c
-
+  list.fold(rotation_constants, state, fn(state, rc) {
     let a = bigi.add(state.a, state.c)
-    let a = bigi.bitwise_and(a, bitmask)
+    let a = bigi.bitwise_and(a, state.bm)
     let b = bigi.add(state.b, state.d)
-    let b = bigi.bitwise_and(b, bitmask)
-    let c = rot_left(state.c, c1, bitmask)
+    let b = bigi.bitwise_and(b, state.bm)
+    let c = rot_left(state.c, rc.0, state.bm)
     let c = bigi.bitwise_exclusive_or(c, a)
-    let d = rot_left(state.d, c2, bitmask)
+    let d = rot_left(state.d, rc.1, state.bm)
     let d = bigi.bitwise_exclusive_or(d, b)
-    let a2 = a
-    let a = b
-    let b = a2
-    HashState(a, b, c, d)
+    HashState(b, a, c, d, state.bm)
   })
 }
 
