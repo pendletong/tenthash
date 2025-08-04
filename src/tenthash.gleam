@@ -42,7 +42,6 @@ pub fn update(state: HashState, data: String) -> Result(HashState, Nil) {
   let data = case state.remaining {
     <<>> -> bit_array.from_string(data)
     <<a:bits>> -> bit_array.append(a, bit_array.from_string(data))
-    _ -> bit_array.from_string(data)
   }
   do_hash(data, state)
 }
@@ -55,7 +54,6 @@ pub fn update_bitarray(
   let data = case state.remaining {
     <<>> -> data
     <<a:bits>> -> bit_array.append(a, data)
-    _ -> data
   }
   do_hash(data, state)
 }
@@ -65,9 +63,9 @@ pub fn finalise(state: HashState) -> Result(BigInt, Nil) {
   finalise_hash(state)
 }
 
-/// Takes a String and returns a BigInt result 
+/// Takes a String and returns a BigInt result
 /// or Error(Nil) if hash failed for some reason
-/// 
+///
 /// ## Examples
 ///
 /// ```gleam
@@ -79,9 +77,9 @@ pub fn hash(data: String) -> Result(BigInt, Nil) {
   hash_bitarray(bit_array.from_string(data))
 }
 
-/// Takes a BitArray and returns a BigInt result 
+/// Takes a BitArray and returns a BigInt result
 /// or Error(Nil) if hash failed for some reason
-/// 
+///
 pub fn hash_bitarray(data: BitArray) -> Result(BigInt, Nil) {
   use init_state <- result.try(initial_state())
 
@@ -120,10 +118,6 @@ fn do_hash(data: BitArray, state: HashState) -> Result(HashState, Nil) {
     <<>> -> Ok(state)
     <<a:bits>> -> {
       Ok(HashState(..state, remaining: a))
-    }
-    // The following shouldn't happen
-    _ -> {
-      Error(Nil)
     }
   }
 }
@@ -176,11 +170,6 @@ fn finalise_hash(state: HashState) -> Result(BigInt, Nil) {
           Error(Nil)
         }
       }
-    }
-
-    // The following shouldn't happen
-    _ -> {
-      Error(Nil)
     }
   })
   let state =
