@@ -1,5 +1,4 @@
 import bigi
-import gleam/io
 import gleam/list
 import gleam/result
 import glychee/benchmark
@@ -7,6 +6,7 @@ import glychee/configuration
 import minigen
 import tenthash
 
+@target(erlang)
 pub fn main() {
   // Configuration is optional
   configuration.initialize()
@@ -17,6 +17,7 @@ pub fn main() {
   bigi_benchmark()
 }
 
+@target(erlang)
 fn bigi_benchmark() {
   benchmark.run(
     [
@@ -54,10 +55,11 @@ fn bigi_benchmark() {
           }),
       ),
     ]
-      |> io.debug,
+      |> echo,
   )
 }
 
+@target(erlang)
 fn hash_benchmark() {
   // Run the benchmarks
   benchmark.run(
