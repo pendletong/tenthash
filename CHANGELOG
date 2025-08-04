@@ -1,3 +1,10 @@
 v1.1.0 - 21 Oct 2024
 - Streaming functions - new, update, update_bitarray and finalise
 - Slight optimisations to hashing mechanism
+
+v1.1.1 - 22 Jun 2025
+- Update libraries
+
+v1.2.0 - 04 Aug 2025
+- Update libraries
+- Validate JS usage
